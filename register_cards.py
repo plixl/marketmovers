@@ -19,16 +19,11 @@ REGISTRATION_SEQUENCE = [
     # Space cards
     ("Space: Payday", "PLACEHOLDER_S01", "space"),
     ("Space: Stock Exchange", "PLACEHOLDER_S02", "space"),
-    ("Space: Action Space #1", "PLACEHOLDER_S03", "space"),
     ("Space: Crypto Hub", "PLACEHOLDER_S04", "space"),
-    ("Space: Event Space #1", "PLACEHOLDER_S05", "space"),
     ("Space: Bond Market", "PLACEHOLDER_S06", "space"),
     ("Space: Real Estate", "PLACEHOLDER_S07", "space"),
-    ("Space: Action Space #2", "PLACEHOLDER_S08", "space"),
     ("Space: Dividend", "PLACEHOLDER_S09", "space"),
     ("Space: Commodity Trade", "PLACEHOLDER_S10", "space"),
-    ("Space: Global Event", "PLACEHOLDER_S11", "space"),
-    ("Space: Action Space #3", "PLACEHOLDER_S12", "space"),
     ("Space: Startup Incubator", "PLACEHOLDER_S13", "space"),
     ("Space: Tax Audit", "PLACEHOLDER_S14", "space"),
     ("Space: Market Reset", "PLACEHOLDER_S15", "space"),
@@ -88,25 +83,16 @@ def register_cards():
         print(f"  Type: {card_type}")
         print(f"  Scan the card now...")
         
-        # Wait for scan
+        # Wait for scan (no timeout, no duplicate check)
         rfid_id = None
-        timeout = 1000
-        start_time = time.time()
         
-        while rfid_id is None and (time.time() - start_time) < timeout:
+        while rfid_id is None:
             rfid_id = rfid.check_for_scan()
             time.sleep(0.1)
         
-        if rfid_id:
-            # Check for duplicate
-            if rfid_id in mappings.values():
-                print(f"  ⚠️  WARNING: This card was already scanned!")
-                print(f"  Skipping...")
-            else:
-                mappings[placeholder] = rfid_id
-                print(f"  ✓ Registered: {rfid_id}")
-        else:
-            print(f"  ✗ Timeout - skipped")
+        # Save the mapping
+        mappings[placeholder] = rfid_id
+        print(f"  ✓ Registered: {rfid_id}")
         
         print()
         time.sleep(0.5)  # Brief pause between cards
