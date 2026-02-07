@@ -1,0 +1,36 @@
+# Generated Card Mappings
+# Copy these into card_registry.py
+
+"D7:EE:F2:30": CARD_MAPPINGS["PLACEHOLDER_P1"],  # Player 1 Wallet
+"47:EE:F8:30": CARD_MAPPINGS["PLACEHOLDER_P2"],  # Player 2 Wallet
+"F7:A7:F5:30": CARD_MAPPINGS["PLACEHOLDER_P3"],  # Player 3 Wallet
+"F7:21:0F:31": CARD_MAPPINGS["PLACEHOLDER_P4"],  # Player 4 Wallet
+"B7:9C:09:31": CARD_MAPPINGS["PLACEHOLDER_S01"],  # Space: Payday
+"D7:C4:01:31": CARD_MAPPINGS["PLACEHOLDER_S02"],  # Space: Stock Exchange
+"": CARD_MAPPINGS["PLACEHOLDER_S04"],  # Space: Crypto Hub
+"77:B9:04:31": CARD_MAPPINGS["PLACEHOLDER_S06"],  # Space: Bond Market
+"77:AE:F9:30": CARD_MAPPINGS["PLACEHOLDER_S07"],  # Space: Real Estate
+"E7:4F:FF:30": CARD_MAPPINGS["PLACEHOLDER_S09"],  # Space: Dividend
+"F7:AF:0B:31": CARD_MAPPINGS["PLACEHOLDER_S10"],  # Space: Commodity Trade
+"17:7A:03:31": CARD_MAPPINGS["PLACEHOLDER_S13"],  # Space: Startup Incubator
+"E7:ED:F6:30": CARD_MAPPINGS["PLACEHOLDER_S14"],  # Space: Tax Audit
+"17:6C:06:31": CARD_MAPPINGS["PLACEHOLDER_S15"],  # Space: Market Reset
+"37:CD:F2:30": CARD_MAPPINGS["PLACEHOLDER_A01"],  # Action: Hostile Takeover #1
+"87:E4:03:31": CARD_MAPPINGS["PLACEHOLDER_A02"],  # Action: Crypto Hack #1
+"57:A4:FA:30": CARD_MAPPINGS["PLACEHOLDER_A03"],  # Action: Insider Tip #1
+"77:71:00:31": CARD_MAPPINGS["PLACEHOLDER_A04"],  # Action: Market Manipulation #1
+"B7:5D:FA:30": CARD_MAPPINGS["PLACEHOLDER_A05"],  # Action: Asset Swap #1
+"67:58:0D:31": CARD_MAPPINGS["PLACEHOLDER_A06"],  # Action: Tax Haven #1
+"07:0D:0F:31": CARD_MAPPINGS["PLACEHOLDER_A07"],  # Action: Bank Loan #1
+"67:08:F9:30": CARD_MAPPINGS["PLACEHOLDER_A08"],  # Action: Charity Donation #1
+"C7:D7:FD:30": CARD_MAPPINGS["PLACEHOLDER_A09"],  # Action: Bonus Dividend #1
+"57:25:FA:30": CARD_MAPPINGS["PLACEHOLDER_A10"],  # Action: Sabotage #1
+"47:2B:FD:30": CARD_MAPPINGS["PLACEHOLDER_E01"],  # Event: Market Boom #1
+"B7:61:FD:30": CARD_MAPPINGS["PLACEHOLDER_E02"],  # Event: Recession #1
+"47:21:0E:31": CARD_MAPPINGS["PLACEHOLDER_E03"],  # Event: Crypto Crash #1
+"07:A8:0A:31": CARD_MAPPINGS["PLACEHOLDER_E04"],  # Event: Gold Rush #1
+"17:5C:FA:30": CARD_MAPPINGS["PLACEHOLDER_E05"],  # Event: Interest Rate Hike #1
+"87:5A:0E:31": CARD_MAPPINGS["PLACEHOLDER_E06"],  # Event: Tech Bubble #1
+"77:F1:FF:30": CARD_MAPPINGS["PLACEHOLDER_E07"],  # Event: Global Crisis #1
+"27:AC:00:31": CARD_MAPPINGS["PLACEHOLDER_E08"],  # Event: Bull Market #1
+"47:4E:0D:31": CARD_MAPPINGS["PLACEHOLDER_E09"],  # Event: Economic Stability #1
