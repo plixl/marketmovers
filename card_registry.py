@@ -44,21 +44,13 @@ CARD_MAPPINGS = {
         "name": "Stock Exchange",
         "description": "Buy/sell stocks ($100 each)"
     },
-    "PLACEHOLDER_S03": {
-        "type": "space",
-        "name": "Action Space",
-        "description": "Draw an action card"
-    },
+
     "PLACEHOLDER_S04": {
         "type": "space",
         "name": "Crypto Hub",
         "description": "Buy/sell crypto ($50 each)"
     },
-    "PLACEHOLDER_S05": {
-        "type": "space",
-        "name": "Event Space",
-        "description": "Draw an event card"
-    },
+
     "PLACEHOLDER_S06": {
         "type": "space",
         "name": "Bond Market",
@@ -69,11 +61,7 @@ CARD_MAPPINGS = {
         "name": "Real Estate",
         "description": "Buy property ($500, locked 2 rounds)"
     },
-    "PLACEHOLDER_S08": {
-        "type": "space",
-        "name": "Action Space",
-        "description": "Draw an action card"
-    },
+
     "PLACEHOLDER_S09": {
         "type": "space",
         "name": "Dividend",
@@ -84,16 +72,8 @@ CARD_MAPPINGS = {
         "name": "Commodity Trade",
         "description": "Buy/sell commodities ($75 each)"
     },
-    "PLACEHOLDER_S11": {
-        "type": "space",
-        "name": "Global Event",
-        "description": "Major market event affects all"
-    },
-    "PLACEHOLDER_S12": {
-        "type": "space",
-        "name": "Action Space",
-        "description": "Draw an action card"
-    },
+
+
     "PLACEHOLDER_S13": {
         "type": "space",
         "name": "Startup Incubator",
