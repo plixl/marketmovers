@@ -172,14 +172,12 @@ class MarketMoversGame:
     
     def handle_action_scan(self, rfid_id, card):
         """Handle action card scan"""
-        # Check if we're on an action space or if action was awaited
-        if not self.awaiting_action_card:
-            current_player = self.game_state.get_current_player()
-            if not current_player:
-                self.current_message = "Scan your player wallet card first!"
-                return
-        
         current_player = self.game_state.get_current_player()
+        
+        if not current_player:
+            self.current_message = "Scan your player wallet card first!"
+            return
+        
         action_name = card["name"]
         print(f"  → Action: {action_name}")
         
@@ -192,12 +190,15 @@ class MarketMoversGame:
             # Execute action immediately
             result = self.card_processor.process_action_card(card, current_player)
             self.current_message = result["message"]
-            self.awaiting_action_card = False
+        
+        self.awaiting_action_card = False
     
     def handle_event_scan(self, rfid_id, card):
         """Handle event card scan"""
-        if not self.awaiting_event_card:
-            self.current_message = "Event cards can only be used on Event spaces"
+        current_player = self.game_state.get_current_player()
+        
+        if not current_player:
+            self.current_message = "Scan your player wallet card first!"
             return
         
         event_name = card["name"]
