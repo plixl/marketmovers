@@ -1,0 +1,9 @@
+{
+  "round": 1,
+  "max_rounds": 10,
+  "players": {},
+  "current_player": null,
+  "game_started": false,
+  "game_over": false,
+  "activity_log": []
+}
