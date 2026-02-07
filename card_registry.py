@@ -12,140 +12,140 @@ INSTRUCTIONS:
 # Card Mappings - Replace placeholders with actual RFID IDs
 CARD_MAPPINGS = {
     # ==================== PLAYER WALLET CARDS ====================
-    "PLACEHOLDER_P1": {
+    "D7:EE:F2:30": {
         "type": "player",
         "name": "Player 1",
         "color": (239, 68, 68)  # Red
     },
-    "PLACEHOLDER_P2": {
+    "47:EE:F8:30": {
         "type": "player",
         "name": "Player 2",
         "color": (59, 130, 246)  # Blue
     },
-    "PLACEHOLDER_P3": {
+    "F7:A7:F5:30": {
         "type": "player",
         "name": "Player 3",
         "color": (34, 197, 94)  # Green
     },
-    "PLACEHOLDER_P4": {
+    "F7:21:0F:31": {
         "type": "player",
         "name": "Player 4",
         "color": (251, 191, 36)  # Yellow
     },
     
     # ==================== BOARD SPACE CARDS ====================
-    "PLACEHOLDER_S01": {
+    "B7:9C:09:31": {
         "type": "space",
         "name": "Payday",
         "description": "Collect $200 salary"
     },
-    "PLACEHOLDER_S02": {
+    "D7:C4:01:31": {
         "type": "space",
         "name": "Stock Exchange",
         "description": "Buy/sell stocks ($100 each)"
     },
 
-    "PLACEHOLDER_S04": {
+    "B7:FE:F4:30": {
         "type": "space",
         "name": "Crypto Hub",
         "description": "Buy/sell crypto ($50 each)"
     },
 
-    "PLACEHOLDER_S06": {
+    "77:B9:04:31": {
         "type": "space",
         "name": "Bond Market",
         "description": "Buy bonds ($200 each)"
     },
-    "PLACEHOLDER_S07": {
+    "77:AE:F9:30": {
         "type": "space",
         "name": "Real Estate",
         "description": "Buy property ($500, locked 2 rounds)"
     },
 
-    "PLACEHOLDER_S09": {
+    "E7:4F:FF:30": {
         "type": "space",
         "name": "Dividend",
         "description": "Stocks/bonds pay 7.5% dividend"
     },
-    "PLACEHOLDER_S10": {
+    "F7:AF:0B:31": {
         "type": "space",
         "name": "Commodity Trade",
         "description": "Buy/sell commodities ($75 each)"
     },
 
 
-    "PLACEHOLDER_S13": {
+    "17:7A:03:31": {
         "type": "space",
         "name": "Startup Incubator",
         "description": "50/50 gamble: Win $300 or lose $100"
     },
-    "PLACEHOLDER_S14": {
+    "E7:ED:F6:30": {
         "type": "space",
         "name": "Tax Audit",
         "description": "Pay $150 tax"
     },
-    "PLACEHOLDER_S15": {
+    "17:6C:06:31": {
         "type": "space",
         "name": "Market Reset",
         "description": "All assets revalue randomly"
     },
     
     # ==================== ACTION CARDS ====================
-    "PLACEHOLDER_A01": {
+    "37:CD:F2:30": {
         "type": "action",
         "name": "Hostile Takeover",
         "description": "Steal 1 stock from target (80% success, 20% fail = pay $50)",
         "requires_target": True
     },
-    "PLACEHOLDER_A02": {
+    "87:E4:03:31": {
         "type": "action",
         "name": "Crypto Hack",
         "description": "Steal 20% of target's crypto value",
         "requires_target": True
     },
-    "PLACEHOLDER_A03": {
+    "57:A4:FA:30": {
         "type": "action",
         "name": "Insider Tip",
         "description": "Peek at next event card",
         "requires_target": False
     },
-    "PLACEHOLDER_A04": {
+    "77:71:00:31": {
         "type": "action",
         "name": "Market Manipulation",
         "description": "Choose one asset type: all players' values change +15%",
         "requires_target": False
     },
-    "PLACEHOLDER_A05": {
+    "B7:5D:FA:30": {
         "type": "action",
         "name": "Asset Swap",
         "description": "Swap one asset type with target player",
         "requires_target": True
     },
-    "PLACEHOLDER_A06": {
+    "67:58:0D:31": {
         "type": "action",
         "name": "Tax Haven",
         "description": "Immune to next Tax Audit",
         "requires_target": False
     },
-    "PLACEHOLDER_A07": {
+    "07:0D:0F:31": {
         "type": "action",
         "name": "Bank Loan",
         "description": "Borrow $500 (must repay $600 in 2 rounds)",
         "requires_target": False
     },
-    "PLACEHOLDER_A08": {
+    "67:08:F9:30": {
         "type": "action",
         "name": "Charity Donation",
         "description": "Donate $100, gain immunity from one attack",
         "requires_target": False
     },
-    "PLACEHOLDER_A09": {
+    "C7:D7:FD:30": {
         "type": "action",
         "name": "Bonus Dividend",
         "description": "Your stocks pay double dividend this round",
         "requires_target": False
     },
-    "PLACEHOLDER_A10": {
+    "57:25:FA:30": {
         "type": "action",
         "name": "Sabotage",
         "description": "Target loses next dividend payment",
@@ -153,7 +153,7 @@ CARD_MAPPINGS = {
     },
     
     # ==================== EVENT CARDS ====================
-    "PLACEHOLDER_E01": {
+    "47:2B:FD:30": {
         "type": "event",
         "name": "Market Boom",
         "description": "All stocks +15%, crypto +25%",
@@ -162,7 +162,7 @@ CARD_MAPPINGS = {
             "crypto": 0.25
         }
     },
-    "PLACEHOLDER_E02": {
+    "B7:61:FD:30": {
         "type": "event",
         "name": "Recession",
         "description": "Stocks -20%, bonds +5%",
@@ -171,7 +171,7 @@ CARD_MAPPINGS = {
             "bonds": 0.05
         }
     },
-    "PLACEHOLDER_E03": {
+    "47:21:0E:31": {
         "type": "event",
         "name": "Crypto Crash",
         "description": "All crypto -30%",
@@ -179,7 +179,7 @@ CARD_MAPPINGS = {
             "crypto": -0.30
         }
     },
-    "PLACEHOLDER_E04": {
+    "07:A8:0A:31": {
         "type": "event",
         "name": "Gold Rush",
         "description": "Commodities +20%",
@@ -187,7 +187,7 @@ CARD_MAPPINGS = {
             "commodities": 0.20
         }
     },
-    "PLACEHOLDER_E05": {
+    "17:5C:FA:30": {
         "type": "event",
         "name": "Interest Rate Hike",
         "description": "Bonds +10%, stocks -5%",
@@ -196,7 +196,7 @@ CARD_MAPPINGS = {
             "stocks": -0.05
         }
     },
-    "PLACEHOLDER_E06": {
+    "87:5A:0E:31": {
         "type": "event",
         "name": "Tech Bubble",
         "description": "Crypto +40%, stocks +10%",
@@ -205,7 +205,7 @@ CARD_MAPPINGS = {
             "stocks": 0.10
         }
     },
-    "PLACEHOLDER_E07": {
+    "77:F1:FF:30": {
         "type": "event",
         "name": "Global Crisis",
         "description": "All assets -10% except bonds +8%",
@@ -216,7 +216,7 @@ CARD_MAPPINGS = {
             "bonds": 0.08
         }
     },
-    "PLACEHOLDER_E08": {
+    "27:AC:00:31": {
         "type": "event",
         "name": "Bull Market",
         "description": "Stocks +12%, commodities +8%",
@@ -225,7 +225,7 @@ CARD_MAPPINGS = {
             "commodities": 0.08
         }
     },
-    "PLACEHOLDER_E09": {
+    "47:4E:0D:31": {
         "type": "event",
         "name": "Economic Stability",
         "description": "All assets +5%",
