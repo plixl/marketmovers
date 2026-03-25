@@ -1,26 +1,22 @@
 """
 Market Movers - Exhibition Mode
-Displays a live demo on the Pi's 800x480 screen next to a trifold.
+Run from your market_movers directory:  python3 exhibition.py
 
-Features:
-  - Simulated player portfolios with animated asset ticker
-  - Live RFID scanning — scan any registered card to see it respond
-  - Scan feed log showing recent card reads
-  - Cycles through player portfolio views automatically
-
-Run from your market_movers directory:
-    python3 exhibition.py
-
-Uses real RFID hardware. Buttons are shown on screen for display only (not wired up).
-ESC to exit.
+Behaviour:
+  - Idle: fullscreen "scan a card to begin" prompt
+  - Scan player card: show that player's portfolio (stays on screen)
+  - Scan event card: apply effects to ALL demo players, highlight changes on screen
+  - Scan action/space card: show the card as a banner over the portfolio
+  - Bottom ticker drifts continuously
+  - ESC to exit
 """
 
 import pygame
-import sys
 import time
 import random
+import copy
 from rfid_handler import create_rfid_handler
-from card_registry import get_card, CARD_MAPPINGS
+from card_registry import get_card
 from config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS,
     COLOR_BG, COLOR_PRIMARY, COLOR_SUCCESS, COLOR_DANGER,
@@ -30,33 +26,17 @@ from config import (
 )
 
 # ---------------------------------------------------------------------------
-# Simulated player data for display
+# Demo player state — mutated live by event scans
 # ---------------------------------------------------------------------------
-DEMO_PLAYERS = [
-    {
-        "name": "Player 1",
-        "color": (239, 68, 68),
-        "cash": 1450,
-        "assets": {"stocks": 3, "crypto": 4, "bonds": 1, "commodities": 2},
-    },
-    {
-        "name": "Player 2",
-        "color": (59, 130, 246),
-        "cash": 820,
-        "assets": {"stocks": 5, "crypto": 1, "bonds": 2, "commodities": 0},
-    },
-    {
-        "name": "Player 3",
-        "color": (34, 197, 94),
-        "cash": 2100,
-        "assets": {"stocks": 1, "crypto": 7, "bonds": 0, "commodities": 3},
-    },
-    {
-        "name": "Player 4",
-        "color": (251, 191, 36),
-        "cash": 630,
-        "assets": {"stocks": 2, "crypto": 0, "bonds": 3, "commodities": 5},
-    },
+INITIAL_PLAYERS = [
+    {"name": "Player 1", "color": (239, 68, 68),  "cash": 1450,
+     "assets": {"stocks": 3, "crypto": 4, "bonds": 1, "commodities": 2}},
+    {"name": "Player 2", "color": (59, 130, 246), "cash": 820,
+     "assets": {"stocks": 5, "crypto": 1, "bonds": 2, "commodities": 0}},
+    {"name": "Player 3", "color": (34, 197, 94),  "cash": 2100,
+     "assets": {"stocks": 1, "crypto": 7, "bonds": 0, "commodities": 3}},
+    {"name": "Player 4", "color": (251, 191, 36), "cash": 630,
+     "assets": {"stocks": 2, "crypto": 0, "bonds": 3, "commodities": 5}},
 ]
 
 ASSET_LABELS = [
@@ -66,7 +46,9 @@ ASSET_LABELS = [
     ("commodities", "Commodities", (168, 85, 247)),
 ]
 
-TICKER_NAMES = ["Stocks", "Crypto", "Bonds", "Commodities"]
+TICKER_NAMES   = ["Stocks", "Crypto", "Bonds", "Commodities"]
+BANNER_SECS    = 5     # card banner auto-dismisses after this
+FLASH_SECS     = 3     # asset change highlights fade after this
 
 
 def net_worth(player):
@@ -77,10 +59,10 @@ def net_worth(player):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Drawing helpers
 # ---------------------------------------------------------------------------
 def draw_text(screen, text, font, color, x, y, align="left"):
-    surf = font.render(text, True, color)
+    surf = font.render(str(text), True, color)
     rect = surf.get_rect()
     if align == "center":
         rect.center = (x, y)
@@ -94,32 +76,29 @@ def draw_text(screen, text, font, color, x, y, align="left"):
     return rect.bottom
 
 
-def draw_rect(screen, color, x, y, w, h, radius=10):
-    pygame.draw.rect(screen, color, (x, y, w, h), border_radius=radius)
+def fill_rect(screen, color, x, y, w, h, r=8):
+    pygame.draw.rect(screen, color, (x, y, w, h), border_radius=r)
 
 
-def draw_rect_outline(screen, color, x, y, w, h, radius=10, width=1):
-    pygame.draw.rect(screen, color, (x, y, w, h), width=width, border_radius=radius)
+def outline_rect(screen, color, x, y, w, h, r=8, lw=1):
+    pygame.draw.rect(screen, color, (x, y, w, h), width=lw, border_radius=r)
+
+
+def signed_pct(val):
+    sign = "+" if val >= 0 else ""
+    return f"{sign}{val:.1f}%"
 
 
 def signed_color(val):
     return COLOR_SUCCESS if val >= 0 else COLOR_DANGER
 
 
-def format_signed(val, suffix="%"):
-    sign = "+" if val >= 0 else ""
-    return f"{sign}{val:.1f}{suffix}"
-
-
 # ---------------------------------------------------------------------------
-# Exhibition app
+# App
 # ---------------------------------------------------------------------------
 class ExhibitionApp:
 
-    PLAYER_CYCLE_SECS = 5      # Auto-advance player view every N seconds
-    TICKER_DRIFT_SECS = 3      # Re-randomise ticker values every N seconds
-    SCAN_FLASH_SECS   = 4      # How long to highlight a scan result
-    MAX_FEED_ITEMS    = 5      # Lines in the scan feed
+    TICKER_DRIFT_SECS = 3
 
     def __init__(self):
         pygame.init()
@@ -129,359 +108,372 @@ class ExhibitionApp:
         pygame.display.set_caption("Market Movers — Exhibition")
         pygame.mouse.set_visible(False)
 
-        self.font_title  = pygame.font.Font(None, FONT_TITLE)
-        self.font_large  = pygame.font.Font(None, FONT_LARGE)
-        self.font_medium = pygame.font.Font(None, FONT_MEDIUM)
-        self.font_small  = pygame.font.Font(None, FONT_SMALL)
-        self.font_tiny   = pygame.font.Font(None, 16)
+        self.fn_title  = pygame.font.Font(None, FONT_TITLE)
+        self.fn_large  = pygame.font.Font(None, FONT_LARGE)
+        self.fn_medium = pygame.font.Font(None, FONT_MEDIUM)
+        self.fn_small  = pygame.font.Font(None, FONT_SMALL)
+        self.fn_tiny   = pygame.font.Font(None, 16)
 
         self.clock = pygame.time.Clock()
+        self.rfid  = create_rfid_handler(simulate=False)
 
-        self.rfid = create_rfid_handler(simulate=False)
+        # Deep-copy so we can mutate without touching INITIAL_PLAYERS
+        self.players = copy.deepcopy(INITIAL_PLAYERS)
 
-        # State
-        self.current_player_idx  = 0
-        self.last_player_cycle   = time.time()
-        self.last_ticker_drift   = time.time()
+        # UI state
+        self.mode = "idle"           # "idle" | "portfolio"
+        self.active_player_idx = 0
+        self.banner      = None      # card dict shown as overlay banner
+        self.banner_time = 0
+        self.asset_changes    = {}   # {asset_key: pct} — from last event card
+        self.asset_flash_time = 0
+        self.scan_feed = []          # [(time_str, card_name, type_color)]
 
-        self.ticker_values = {n: random.uniform(-15, 20) for n in TICKER_NAMES}
-
-        self.scan_feed   = []          # list of (timestamp_str, card_name, card_type)
-        self.last_scan   = None        # (card_dict, rfid_id, scan_time)
-        self.scan_flash  = False
+        self.ticker_values    = {n: random.uniform(-15, 20) for n in TICKER_NAMES}
+        self.last_ticker_drift = time.time()
 
         self.running = True
-        print("Exhibition mode started. Scan any registered card.")
+        print("Exhibition mode started. ESC to exit.")
 
-    # ------------------------------------------------------------------
-    # Main loop
     # ------------------------------------------------------------------
     def run(self):
         while self.running:
             self._handle_events()
             self._handle_rfid()
-            self._tick_auto_cycle()
-            self._tick_ticker()
+            self._tick()
             self._render()
             self.clock.tick(FPS)
-
         pygame.quit()
-        print("Exhibition mode exited.")
 
-    # ------------------------------------------------------------------
-    # Input
     # ------------------------------------------------------------------
     def _handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.running = False
 
+    # ------------------------------------------------------------------
     def _handle_rfid(self):
         rfid_id = self.rfid.check_for_scan()
         if not rfid_id:
             return
         card = get_card(rfid_id)
-        if card:
-            ts = time.strftime("%H:%M:%S")
-            self.scan_feed.insert(0, (ts, card["name"], card["type"], rfid_id))
-            if len(self.scan_feed) > self.MAX_FEED_ITEMS:
-                self.scan_feed.pop()
-            self.last_scan  = (card, rfid_id, time.time())
-            self.scan_flash = True
-            print(f"[SCAN] {card['name']} ({card['type']}) — {rfid_id}")
+        if not card:
+            print(f"[SCAN] Unknown: {rfid_id}")
+            return
+
+        ctype = card["type"]
+        print(f"[SCAN] {card['name']} ({ctype})")
+
+        # Add to scan feed
+        self.scan_feed.insert(0, (time.strftime("%H:%M:%S"), card["name"],
+                                  self._type_color(ctype)))
+        if len(self.scan_feed) > 4:
+            self.scan_feed.pop()
+
+        if ctype == "player":
+            self._on_player_card(card)
+        elif ctype == "event":
+            self._on_event_card(card)
         else:
-            ts = time.strftime("%H:%M:%S")
-            self.scan_feed.insert(0, (ts, f"Unknown ({rfid_id})", "unknown", rfid_id))
-            if len(self.scan_feed) > self.MAX_FEED_ITEMS:
-                self.scan_feed.pop()
-            print(f"[SCAN] Unknown card: {rfid_id}")
+            # action or space — show as banner, don't change portfolios
+            self.banner      = card
+            self.banner_time = time.time()
+            if self.mode == "idle":
+                self.mode = "portfolio"
+
+    def _on_player_card(self, card):
+        # Match card name to one of our demo players
+        idx = 0
+        for i, p in enumerate(self.players):
+            if p["name"] == card["name"]:
+                idx = i
+                break
+        self.active_player_idx = idx
+        self.mode   = "portfolio"
+        self.banner = None
+        self.asset_changes = {}
+        print(f"  → Showing {self.players[idx]['name']}")
+
+    def _on_event_card(self, card):
+        effects = card.get("effects", {})
+        # Apply to ALL players
+        for p in self.players:
+            for asset_key, pct in effects.items():
+                old = p["assets"].get(asset_key, 0)
+                p["assets"][asset_key] = max(0, round(old * (1 + pct)))
+        self.asset_changes    = effects.copy()
+        self.asset_flash_time = time.time()
+        self.banner      = card
+        self.banner_time = time.time()
+        if self.mode == "idle":
+            self.mode = "portfolio"
+        print(f"  → Event applied: {effects}")
 
     # ------------------------------------------------------------------
-    # Timed updates
-    # ------------------------------------------------------------------
-    def _tick_auto_cycle(self):
-        if time.time() - self.last_player_cycle >= self.PLAYER_CYCLE_SECS:
-            self.current_player_idx = (self.current_player_idx + 1) % len(DEMO_PLAYERS)
-            self.last_player_cycle  = time.time()
-
-    def _tick_ticker(self):
-        if time.time() - self.last_ticker_drift >= self.TICKER_DRIFT_SECS:
+    def _tick(self):
+        if self.banner and time.time() - self.banner_time > BANNER_SECS:
+            self.banner = None
+        if self.asset_changes and time.time() - self.asset_flash_time > FLASH_SECS:
+            self.asset_changes = {}
+        if time.time() - self.last_ticker_drift > self.TICKER_DRIFT_SECS:
             for name in TICKER_NAMES:
-                # Drift each value a little each tick so it feels live
                 self.ticker_values[name] += random.uniform(-3, 3)
                 self.ticker_values[name] = max(-40, min(60, self.ticker_values[name]))
             self.last_ticker_drift = time.time()
 
-        # Clear flash after timeout
-        if self.scan_flash and self.last_scan:
-            if time.time() - self.last_scan[2] > self.SCAN_FLASH_SECS:
-                self.scan_flash = False
-
     # ------------------------------------------------------------------
-    # Rendering
+    # Render
     # ------------------------------------------------------------------
     def _render(self):
         self.screen.fill(COLOR_BG)
-        self._draw_header()
-        self._draw_player_panel()       # Left column
-        self._draw_scan_panel()         # Right column
-        self._draw_ticker()             # Bottom bar
+        if self.mode == "idle":
+            self._draw_idle()
+        else:
+            self._draw_portfolio()
+            if self.banner:
+                self._draw_banner()
+        self._draw_ticker()
         pygame.display.flip()
 
-    # --- Header --------------------------------------------------------
-    def _draw_header(self):
-        # Title
-        draw_text(self.screen, "MARKET MOVERS", self.font_title,
-                  COLOR_PRIMARY, SCREEN_WIDTH // 2, 18, align="center")
-        # Subtitle
-        draw_text(self.screen, "Digital banking board game — scan a card to see it in action",
-                  self.font_tiny, COLOR_TEXT_DIM, SCREEN_WIDTH // 2, 44, align="center")
-        # Divider
-        pygame.draw.line(self.screen, COLOR_CARD_BG,
-                         (0, 58), (SCREEN_WIDTH, 58), 1)
+    # --- Idle ----------------------------------------------------------
+    def _draw_idle(self):
+        cx = SCREEN_WIDTH // 2
+        cy = (SCREEN_HEIGHT - 30) // 2
 
-    # --- Left: player portfolio ----------------------------------------
-    def _draw_player_panel(self):
-        x, y = 8, 66
-        panel_w = 390
+        draw_text(self.screen, "MARKET MOVERS", self.fn_title,
+                  COLOR_PRIMARY, cx, cy - 110, align="center")
+        draw_text(self.screen, "Digital banking board game",
+                  self.fn_medium, COLOR_TEXT_DIM, cx, cy - 78, align="center")
 
-        player = DEMO_PLAYERS[self.current_player_idx]
+        # Pulsing NFC ring
+        t     = time.time()
+        pulse = abs((t % 1.8) / 0.9 - 1.0)
+        rr    = int(28 + pulse * 12)
+        alpha = int(180 - pulse * 150)
+        surf  = pygame.Surface((rr * 2 + 4, rr * 2 + 4), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (*COLOR_PRIMARY, alpha), (rr + 2, rr + 2), rr, 2)
+        self.screen.blit(surf, (cx - rr - 2, cy - rr + 8))
+        pygame.draw.circle(self.screen, COLOR_PRIMARY, (cx, cy + 10 + rr - 28), 20)
+        for off in (7, 13):
+            pygame.draw.arc(self.screen, COLOR_BG,
+                            (cx - off, cy + 10 + rr - 28 - off, off * 2, off * 2),
+                            0.3, 2.84, 2)
 
-        # Player tabs (small dots)
-        for i, p in enumerate(DEMO_PLAYERS):
-            dot_x = x + 10 + i * 20
-            r = 5 if i != self.current_player_idx else 7
-            pygame.draw.circle(self.screen, p["color"], (dot_x, y + 6), r)
+        draw_text(self.screen, "Scan your player card to begin",
+                  self.fn_large, COLOR_TEXT, cx, cy + 55, align="center")
+        draw_text(self.screen, "Then scan event, action, or space cards",
+                  self.fn_tiny, COLOR_TEXT_DIM, cx, cy + 80, align="center")
 
-        # Cycle hint
-        draw_text(self.screen, "auto-cycling players",
-                  self.font_tiny, COLOR_TEXT_DIM, x + panel_w, y + 2, align="right")
+        # Legend
+        legend = [("Player", COLOR_SUCCESS), ("Space", COLOR_PRIMARY),
+                  ("Action", COLOR_WARNING),  ("Event", (168, 85, 247))]
+        lx = cx - 200
+        for i, (label, col) in enumerate(legend):
+            bx = lx + i * 105
+            pygame.draw.circle(self.screen, col, (bx, cy + 114), 6)
+            draw_text(self.screen, label, self.fn_tiny, COLOR_TEXT_DIM, bx + 12, cy + 108)
 
-        y += 20
+    # --- Portfolio -----------------------------------------------------
+    def _draw_portfolio(self):
+        TICKER_H = 30
+        usable_h = SCREEN_HEIGHT - TICKER_H
+        PAD      = 12
+        player   = self.players[self.active_player_idx]
 
-        # Player card background
-        card_h = 270
-        draw_rect(self.screen, COLOR_CARD_BG, x, y, panel_w, card_h, radius=10)
+        # Header strip
+        fill_rect(self.screen, COLOR_CARD_BG, 0, 0, SCREEN_WIDTH, 52, r=0)
+        pygame.draw.circle(self.screen, player["color"], (PAD + 14, 26), 10)
+        draw_text(self.screen, player["name"], self.fn_large, COLOR_TEXT, PAD + 30, 13)
+        draw_text(self.screen, "MARKET MOVERS  —  exhibition",
+                  self.fn_tiny, COLOR_TEXT_DIM, SCREEN_WIDTH - PAD, 18, align="right")
 
-        # Player name + colour dot
-        pygame.draw.circle(self.screen, player["color"], (x + 20, y + 22), 8)
-        draw_text(self.screen, player["name"], self.font_large,
-                  COLOR_TEXT, x + 36, y + 12)
+        # Player selector dots top-right
+        for i, p in enumerate(self.players):
+            dx = SCREEN_WIDTH - PAD - (len(self.players) - 1 - i) * 20
+            r  = 7 if i == self.active_player_idx else 4
+            pygame.draw.circle(self.screen, p["color"], (dx, 38), r)
 
-        # Cash
-        draw_text(self.screen, "cash", self.font_tiny, COLOR_TEXT_DIM, x + 14, y + 42)
-        draw_text(self.screen, f"${player['cash']:,}", self.font_large,
-                  COLOR_SUCCESS, x + 14, y + 56)
+        pygame.draw.line(self.screen, (30, 45, 70), (0, 52), (SCREEN_WIDTH, 52), 1)
 
-        # Assets grid (2×2)
-        ay = y + 96
-        col_w = panel_w // 2 - 8
-        for idx, (key, label, color) in enumerate(ASSET_LABELS):
-            col = idx % 2
-            row = idx // 2
-            ax = x + 8 + col * (col_w + 8)
-            aay = ay + row * 62
+        # Layout columns
+        col_y   = 60
+        left_w  = 350
+        right_w = SCREEN_WIDTH - left_w - PAD * 3
+        left_x  = PAD
+        right_x = left_x + left_w + PAD
 
-            draw_rect(self.screen, (20, 30, 50), ax, aay, col_w, 54, radius=6)
-            draw_text(self.screen, label, self.font_tiny, COLOR_TEXT_DIM, ax + 8, aay + 6)
-            qty = player["assets"][key]
-            draw_text(self.screen, str(qty), self.font_large, color, ax + 8, aay + 22)
-            val = qty * ASSET_PRICES[key]
-            draw_text(self.screen, f"${val:,}", self.font_tiny, COLOR_TEXT_DIM,
-                      ax + col_w - 6, aay + 36, align="right")
+        # Cash + net worth
+        draw_text(self.screen, "Cash", self.fn_tiny, COLOR_TEXT_DIM, left_x, col_y)
+        draw_text(self.screen, f"${player['cash']:,}", self.fn_title,
+                  COLOR_SUCCESS if player["cash"] >= 0 else COLOR_DANGER,
+                  left_x, col_y + 16)
 
-        # Net worth bar
-        ny = y + card_h - 36
+        draw_text(self.screen, "Net worth", self.fn_tiny, COLOR_TEXT_DIM,
+                  left_x + left_w, col_y, align="right")
+        draw_text(self.screen, f"${net_worth(player):,}", self.fn_large,
+                  COLOR_PRIMARY, left_x + left_w, col_y + 16, align="right")
+
         pygame.draw.line(self.screen, (30, 45, 70),
-                         (x + 8, ny - 4), (x + panel_w - 8, ny - 4), 1)
-        draw_text(self.screen, "Net worth", self.font_tiny, COLOR_TEXT_DIM, x + 14, ny + 4)
-        draw_text(self.screen, f"${net_worth(player):,}", self.font_medium,
-                  COLOR_PRIMARY, x + panel_w - 14, ny + 2, align="right")
+                         (left_x, col_y + 52), (left_x + left_w, col_y + 52), 1)
 
-        # --- Mini leaderboard below card ---
-        ly = y + card_h + 10
-        draw_text(self.screen, "Leaderboard", self.font_tiny, COLOR_TEXT_DIM, x + 8, ly)
-        sorted_players = sorted(DEMO_PLAYERS, key=net_worth, reverse=True)
-        for rank, p in enumerate(sorted_players, 1):
-            ry = ly + 16 + (rank - 1) * 22
-            medal_colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50), COLOR_TEXT_DIM]
-            pygame.draw.circle(self.screen, p["color"], (x + 18, ry + 8), 5)
-            draw_text(self.screen, f"{rank}. {p['name']}", self.font_tiny,
-                      COLOR_TEXT, x + 28, ry + 2)
-            draw_text(self.screen, f"${net_worth(p):,}", self.font_tiny,
-                      medal_colors[rank - 1], x + panel_w - 10, ry + 2, align="right")
+        # 2×2 asset cards
+        card_w = (left_w - PAD) // 2
+        card_h = 78
+        for idx, (key, label, col) in enumerate(ASSET_LABELS):
+            cx = left_x + (idx % 2) * (card_w + PAD)
+            cy = col_y + 60 + (idx // 2) * (card_h + 8)
+            qty = player["assets"][key]
+            val = qty * ASSET_PRICES[key]
 
-    # --- Right: scan panel ---------------------------------------------
-    def _draw_scan_panel(self):
-        x = 406
-        y = 66
-        panel_w = SCREEN_WIDTH - x - 8
+            # Flash background on event change
+            if key in self.asset_changes:
+                pct = self.asset_changes[key]
+                age = time.time() - self.asset_flash_time
+                fade = max(0.0, 1.0 - age / FLASH_SECS)
+                base_pos = (34, 197, 94) if pct >= 0 else (239, 68, 68)
+                bg = tuple(int(12 + base_pos[c] * 0.25 * fade) for c in range(3))
+            else:
+                bg = (20, 30, 50)
 
-        # --- Scan result box ---
-        result_h = 160
-        if self.scan_flash and self.last_scan:
-            card, rfid_id, _ = self.last_scan
-            border_color = self._type_color(card["type"])
-            draw_rect(self.screen, COLOR_CARD_BG, x, y, panel_w, result_h, radius=10)
-            draw_rect_outline(self.screen, border_color, x, y, panel_w, result_h,
-                              radius=10, width=2)
+            fill_rect(self.screen, bg, cx, cy, card_w, card_h, r=8)
 
-            # Type badge
-            badge_color = self._type_badge_bg(card["type"])
-            badge_text  = card["type"].upper()
-            bw = self.font_tiny.size(badge_text)[0] + 16
-            draw_rect(self.screen, badge_color, x + 10, y + 10, bw, 20, radius=4)
-            draw_text(self.screen, badge_text, self.font_tiny,
-                      border_color, x + 10 + bw // 2, y + 20, align="center")
+            draw_text(self.screen, label, self.fn_tiny, COLOR_TEXT_DIM, cx + 8, cy + 6)
+            draw_text(self.screen, str(qty), self.fn_large, col, cx + 8, cy + 24)
+            draw_text(self.screen, f"${val:,}", self.fn_tiny, COLOR_TEXT_DIM,
+                      cx + card_w - 8, cy + 30, align="right")
 
-            # Card name
-            draw_text(self.screen, card["name"], self.font_large,
-                      COLOR_TEXT, x + 10, y + 38)
+            # Change badge
+            if key in self.asset_changes:
+                pct = self.asset_changes[key]
+                ind_col = COLOR_SUCCESS if pct >= 0 else COLOR_DANGER
+                draw_text(self.screen, signed_pct(pct * 100),
+                          self.fn_tiny, ind_col,
+                          cx + card_w - 8, cy + card_h - 18, align="right")
 
-            # Description
-            desc = card.get("description", "")
-            self._draw_wrapped(desc, self.font_tiny, COLOR_TEXT_DIM,
-                               x + 10, y + 64, panel_w - 20, line_h=18)
-
-            # RFID ID
-            draw_text(self.screen, rfid_id, self.font_tiny,
-                      COLOR_TEXT_DIM, x + panel_w - 10, y + result_h - 14, align="right")
-
-        else:
-            # Idle: animated "scan here" prompt
-            draw_rect(self.screen, COLOR_CARD_BG, x, y, panel_w, result_h, radius=10)
-            draw_rect_outline(self.screen, (40, 55, 80), x, y, panel_w, result_h,
-                              radius=10, width=1)
-
-            # Pulsing ring
-            t = time.time()
-            pulse = abs((t % 1.6) / 0.8 - 1.0)
-            ring_r = int(22 + pulse * 10)
-            ring_alpha = int(180 - pulse * 140)
-            cx = x + panel_w // 2
-            cy = y + 60
-            ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
-            pygame.draw.circle(ring_surf, (*COLOR_PRIMARY, ring_alpha),
-                               (ring_r + 2, ring_r + 2), ring_r, 2)
-            self.screen.blit(ring_surf, (cx - ring_r - 2, cy - ring_r - 2))
-            pygame.draw.circle(self.screen, COLOR_PRIMARY, (cx, cy), 16)
-            # NFC icon lines
-            for offset in (6, 11):
-                pygame.draw.arc(self.screen, COLOR_BG,
-                                (cx - offset, cy - offset, offset * 2, offset * 2),
-                                0.3, 2.84, 2)
-
-            draw_text(self.screen, "Scan a card", self.font_medium,
-                      COLOR_TEXT, cx, y + 100, align="center")
-            draw_text(self.screen, "Hold any game card near the RFID reader",
-                      self.font_tiny, COLOR_TEXT_DIM, cx, y + 122, align="center")
-            draw_text(self.screen, "Space  ·  Action  ·  Event  ·  Player wallet",
-                      self.font_tiny, COLOR_TEXT_DIM, cx, y + 140, align="center")
-
-        # --- Scan feed ---
-        fy = y + result_h + 10
-        draw_text(self.screen, "Recent scans", self.font_tiny, COLOR_TEXT_DIM, x + 8, fy)
-        fy += 16
-
-        feed_h = 22
-        for i, entry in enumerate(self.scan_feed):
-            ts, name, ctype, _ = entry
+        # RIGHT: scan feed
+        draw_text(self.screen, "Recent scans", self.fn_tiny, COLOR_TEXT_DIM, right_x, col_y)
+        fy      = col_y + 18
+        feed_h  = 26
+        for i, (ts, name, tcol) in enumerate(self.scan_feed):
             ey = fy + i * feed_h
-            row_color = (20, 32, 52) if i % 2 == 0 else COLOR_BG
-            draw_rect(self.screen, row_color, x, ey, panel_w, feed_h - 1, radius=4)
-
-            dot_col = self._type_color(ctype)
-            pygame.draw.circle(self.screen, dot_col, (x + 10, ey + 10), 4)
-            draw_text(self.screen, name, self.font_tiny, COLOR_TEXT, x + 20, ey + 5)
-            draw_text(self.screen, ts, self.font_tiny, COLOR_TEXT_DIM,
-                      x + panel_w - 6, ey + 5, align="right")
+            fill_rect(self.screen, (20, 32, 52) if i % 2 == 0 else COLOR_BG,
+                      right_x, ey, right_w, feed_h - 2, r=4)
+            pygame.draw.circle(self.screen, tcol, (right_x + 10, ey + 12), 4)
+            draw_text(self.screen, name, self.fn_tiny, COLOR_TEXT, right_x + 20, ey + 8)
+            draw_text(self.screen, ts, self.fn_tiny, COLOR_TEXT_DIM,
+                      right_x + right_w - 4, ey + 8, align="right")
 
         if not self.scan_feed:
-            draw_text(self.screen, "No scans yet — try it!",
-                      self.font_tiny, COLOR_TEXT_DIM,
-                      x + panel_w // 2, fy + 10, align="center")
+            draw_text(self.screen, "No scans yet",
+                      self.fn_tiny, COLOR_TEXT_DIM,
+                      right_x + right_w // 2, fy + 12, align="center")
 
-        # --- How to play blurb ---
-        blurb_y = fy + self.MAX_FEED_ITEMS * feed_h + 10
-        items = [
-            "Roll dice, move on the physical board",
-            "Scan space card  →  buy assets digitally",
-            "Draw action/event cards and scan them",
-            "Most net worth after 10 rounds wins",
-        ]
-        for i, line in enumerate(items):
-            draw_text(self.screen, f"  {i+1}.  {line}",
-                      self.font_tiny, COLOR_TEXT_DIM, x + 8, blurb_y + i * 18)
-
-        # --- Decorative button display (display only, not functional) ---
-        btn_y = blurb_y + len(items) * 18 + 10
+        # Leaderboard
+        lb_y = fy + max(1, len(self.scan_feed)) * feed_h + 16
         pygame.draw.line(self.screen, (30, 45, 70),
-                         (x + 8, btn_y), (x + panel_w - 8, btn_y), 1)
-        btn_y += 8
-        btn_data = [
-            ("CONFIRM",    (34, 197, 94),   (10, 50, 25)),
-            ("CANCEL",     (239, 68, 68),   (60, 15, 15)),
-            ("NEXT ROUND", (59, 130, 246),  (10, 25, 60)),
-        ]
-        btn_w = (panel_w - 16) // 3
-        for i, (label, dot_col, bg_col) in enumerate(btn_data):
-            bx = x + 8 + i * (btn_w + 2)
-            draw_rect(self.screen, bg_col, bx, btn_y, btn_w, 22, radius=5)
-            pygame.draw.circle(self.screen, dot_col, (bx + 10, btn_y + 11), 5)
-            draw_text(self.screen, label, self.font_tiny, dot_col,
-                      bx + 20, btn_y + 6)
+                         (right_x, lb_y - 6), (right_x + right_w, lb_y - 6), 1)
+        draw_text(self.screen, "Leaderboard", self.fn_tiny, COLOR_TEXT_DIM, right_x, lb_y)
+        sorted_p = sorted(self.players, key=net_worth, reverse=True)
+        medal    = [(255, 215, 0), (192, 192, 192), (205, 127, 50), COLOR_TEXT_DIM]
+        for rank, p in enumerate(sorted_p, 1):
+            ry      = lb_y + 18 + (rank - 1) * 28
+            is_me   = p["name"] == self.players[self.active_player_idx]["name"]
+            fill_rect(self.screen, (25, 38, 62) if is_me else COLOR_BG,
+                      right_x, ry - 2, right_w, 24, r=4)
+            pygame.draw.circle(self.screen, p["color"], (right_x + 10, ry + 9), 5)
+            draw_text(self.screen, f"{rank}.  {p['name']}",
+                      self.fn_tiny, COLOR_TEXT, right_x + 22, ry + 5)
+            draw_text(self.screen, f"${net_worth(p):,}",
+                      self.fn_tiny, medal[rank - 1],
+                      right_x + right_w - 4, ry + 5, align="right")
 
-    # --- Bottom ticker -------------------------------------------------
+        # Decorative button strip
+        btn_y = usable_h - 34
+        pygame.draw.line(self.screen, (30, 45, 70), (0, btn_y - 2), (SCREEN_WIDTH, btn_y - 2), 1)
+        btns = [("CONFIRM", (34, 197, 94), (10, 40, 20)),
+                ("CANCEL",  (239, 68, 68), (50, 12, 12)),
+                ("NEXT ROUND", (59, 130, 246), (10, 20, 55))]
+        bw = SCREEN_WIDTH // 3
+        for i, (label, col, bg) in enumerate(btns):
+            bx = i * bw
+            fill_rect(self.screen, bg, bx + 4, btn_y, bw - 8, 28, r=6)
+            pygame.draw.circle(self.screen, col, (bx + 18, btn_y + 14), 6)
+            draw_text(self.screen, label, self.fn_tiny, col, bx + 30, btn_y + 9)
+
+    # --- Card banner ---------------------------------------------------
+    def _draw_banner(self):
+        card       = self.banner
+        ctype      = card["type"]
+        border_col = self._type_color(ctype)
+
+        bx, by = 50, 70
+        bw, bh = SCREEN_WIDTH - 100, 170
+        fill_rect(self.screen, (10, 18, 36), bx, by, bw, bh, r=14)
+        outline_rect(self.screen, border_col, bx, by, bw, bh, r=14, lw=2)
+
+        # Type badge
+        badge = ctype.upper()
+        bdw   = self.fn_tiny.size(badge)[0] + 18
+        fill_rect(self.screen, self._type_badge_bg(ctype), bx + 14, by + 12, bdw, 22, r=4)
+        draw_text(self.screen, badge, self.fn_tiny, border_col,
+                  bx + 14 + bdw // 2, by + 23, align="center")
+
+        draw_text(self.screen, card["name"], self.fn_large,
+                  COLOR_TEXT, bx + 14, by + 44)
+
+        self._wrapped(card.get("description", ""), self.fn_tiny, COLOR_TEXT_DIM,
+                      bx + 14, by + 70, bw - 28)
+
+        # Event effects line
+        if ctype == "event" and "effects" in card:
+            ex = bx + 14
+            ey = by + 108
+            for asset, pct in card["effects"].items():
+                col = COLOR_SUCCESS if pct >= 0 else COLOR_DANGER
+                draw_text(self.screen, f"{asset.capitalize()}  {signed_pct(pct * 100)}",
+                          self.fn_tiny, col, ex, ey)
+                ex += 130
+
+        # Countdown bar
+        remain = max(0.0, 1.0 - (time.time() - self.banner_time) / BANNER_SECS)
+        fill_rect(self.screen, (30, 45, 70), bx + 14, by + bh - 10, bw - 28, 4, r=2)
+        fill_rect(self.screen, border_col, bx + 14, by + bh - 10,
+                  int((bw - 28) * remain), 4, r=2)
+
+    # --- Ticker --------------------------------------------------------
     def _draw_ticker(self):
         bar_y = SCREEN_HEIGHT - 30
         pygame.draw.line(self.screen, COLOR_CARD_BG,
                          (0, bar_y - 1), (SCREEN_WIDTH, bar_y - 1), 1)
-        draw_rect(self.screen, (10, 18, 34), 0, bar_y, SCREEN_WIDTH, 30, radius=0)
-
-        col_w = SCREEN_WIDTH // (len(TICKER_NAMES) + 1)
-
-        draw_text(self.screen, "LIVE MARKET",
-                  self.font_tiny, COLOR_TEXT_DIM, 10, bar_y + 9)
-
+        fill_rect(self.screen, (10, 18, 34), 0, bar_y, SCREEN_WIDTH, 30, r=0)
+        draw_text(self.screen, "MARKET", self.fn_tiny, COLOR_TEXT_DIM, 8, bar_y + 9)
+        col_w = (SCREEN_WIDTH - 80) // len(TICKER_NAMES)
         for i, name in enumerate(TICKER_NAMES):
             val = self.ticker_values[name]
-            tx = (i + 1) * col_w + col_w // 2
-            draw_text(self.screen, name, self.font_tiny,
-                      COLOR_TEXT_DIM, tx - 4, bar_y + 6)
-            draw_text(self.screen, format_signed(val),
-                      self.font_tiny, signed_color(val),
-                      tx + 50, bar_y + 6)
-
-        # Quit hint
-        draw_text(self.screen, "ESC to exit",
-                  self.font_tiny, COLOR_TEXT_DIM, SCREEN_WIDTH - 8, bar_y + 9, align="right")
+            tx  = 72 + i * col_w
+            draw_text(self.screen, name, self.fn_tiny, COLOR_TEXT_DIM, tx, bar_y + 6)
+            draw_text(self.screen, signed_pct(val), self.fn_tiny,
+                      signed_color(val), tx + 76, bar_y + 6)
+        draw_text(self.screen, "ESC to exit", self.fn_tiny,
+                  COLOR_TEXT_DIM, SCREEN_WIDTH - 8, bar_y + 9, align="right")
 
     # --- Helpers -------------------------------------------------------
     def _type_color(self, ctype):
-        return {
-            "space":  COLOR_PRIMARY,
-            "action": COLOR_WARNING,
-            "event":  (168, 85, 247),
-            "player": COLOR_SUCCESS,
-        }.get(ctype, COLOR_TEXT_DIM)
+        return {"space": COLOR_PRIMARY, "action": COLOR_WARNING,
+                "event": (168, 85, 247), "player": COLOR_SUCCESS
+                }.get(ctype, COLOR_TEXT_DIM)
 
     def _type_badge_bg(self, ctype):
-        return {
-            "space":  (15, 40, 80),
-            "action": (80, 60, 10),
-            "event":  (50, 20, 80),
-            "player": (10, 60, 30),
-        }.get(ctype, COLOR_CARD_BG)
+        return {"space": (15, 40, 80), "action": (70, 50, 10),
+                "event": (45, 15, 75), "player": (10, 55, 25)
+                }.get(ctype, COLOR_CARD_BG)
 
-    def _draw_wrapped(self, text, font, color, x, y, max_w, line_h=20):
-        words = text.split()
-        line  = ""
-        cy    = y
+    def _wrapped(self, text, font, color, x, y, max_w, line_h=18):
+        words, line, cy = text.split(), "", y
         for word in words:
-            test = line + (" " if line else "") + word
+            test = (line + " " + word).strip()
             if font.size(test)[0] > max_w:
                 if line:
                     draw_text(self.screen, line, font, color, x, cy)
@@ -494,16 +486,13 @@ class ExhibitionApp:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 def main():
     app = ExhibitionApp()
     try:
         app.run()
     except KeyboardInterrupt:
-        print("\nInterrupted.")
         pygame.quit()
-    except Exception as e:
+    except Exception:
         import traceback
         traceback.print_exc()
         pygame.quit()
